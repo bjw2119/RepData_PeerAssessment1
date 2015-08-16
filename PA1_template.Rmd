@@ -1,25 +1,90 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "repdata-031 project1"
+author: "bjw"
+date: "August 14, 2015"
+output: html_document
 ---
+##Activity Monitoring Assignment
+
+I've loaded here the dataset and subsequently split it into data frames segmented by date and by the 5 minute interval measured
+
+```{r loaddata}
+walkdata<- data.frame(read.csv("activity.csv"))
+#Split by date
+walkdatadays<- split(walkdata, walkdata$date)
+#Split by interval
+walkdataintervals<- split(walkdata, walkdata$interval)
+```
+
+###Mean and Median Steps per Day
+When we examine the total steps per day, we find that , with a daily average step count of 9,354.23 steps and a median 10,934 steps taken daily.
+
+```{r meansteps}
+totalsteps<- sapply(walkdatadays, function(x)sum(x$steps, na.rm = TRUE))
+hist(totalsteps)
+mean(totalsteps)
+median(totalsteps)
+```
+
+###Steps by Time Interval
+A more detailed look at the steps taken per the indexed 5 minute time intervals during the day indicates that the steps per day peak in about the eighth hour of the day, perhaps as people begin their day and possibly exercise or head to work. There are additional, smaller peaks later in the day, likely as people take lunch or get off work. 
+
+```{r stepintervals}
+averagesteps<- tapply(walkdata$steps, walkdata$interval, mean, na.rm = TRUE)
+plot(averagesteps, type = "l")
+```
+
+We also note that time interval 835 has the highest average number of steps at 104 steps in 4 minutes
+```{r maxaveragesteps}
+which.max(averagesteps)
+```
+
+###Imputing Missing Data
+We see below that there are 2,304 step measurements with missing data.
+```{r countmissing, warning = FALSE}
+sum(is.na(walkdata$steps))
+```
 
 
-## Loading and preprocessing the data
+Here we will attempt to impute some of the missing data by simply filling missing values with the median step count for that 5 minute interval. We can see that by imputing the missing data, we see that the average dailty step count increases to 9,503.869 steps per day, with the median step count barely changing at 10,395, a one-step difference from the earlier data with missing values. By filling in missing values with the median for the 5 minute interval in which they occur, we have offset some of the outlying lower value observations, which helps raise the mean, while keeping the median relatively equal.
+```{r imputemissing, warning = FALSE, message = FALSE}
+library(plyr)
+library(Hmisc)
+imputeddata<- ddply(walkdata, ~ interval, transform, steps= impute(steps, median))
+imputeddatadays<-walkdatadays<- split(imputeddata, imputeddata$date)
+totalimputedsteps<- sapply(imputeddatadays, function(x)sum(x$steps, na.rm = TRUE))
+
+#display imputed data summary
+hist(totalimputedsteps)
+mean(totalimputedsteps)
+median(totalimputedsteps)
+```
 
 
+###Weekdays vs. Weekends
+Examining the differences between weekday step counts per 5 minute interval and weekend step counts for 5 minute interval, it becomes clear that weekday step counts peak much earlier in the day, whereas weekend step counts begin increasing later in the day and do not reach their peak until later in the day, possibly as people go to dinner or otherwise enjoy their weekend.
+```{r daysofweek}
+#Add day of the week to imputed data set
+daysadded <- ddply(imputeddata, "interval", mutate, dayofwk = weekdays(as.Date(date)))
 
-## What is mean total number of steps taken per day?
+#Label as weekend or weekday
+daysadded[daysadded=="Saturday"]<-"WE"
+daysadded[daysadded== "Sunday"]<- "WE"
+daysadded[daysadded== "Monday"]<- "WD"
+daysadded[daysadded== "Tuesday"]<- "WD"
+daysadded[daysadded== "Wednesday"]<- "WD"
+daysadded[daysadded== "Thursday"]<- "WD"
+daysadded[daysadded== "Friday"]<- "WD"
 
+#Split data into weekends vs. weekdays
+weekendsteps<- subset(daysadded, dayofwk=="WE")
+weekdaysteps<- subset(daysadded, dayofwk=="WD")
 
+#Add a column for average steps for the 5 minute interval
+averageWEsteps<- ddply(weekendsteps, "interval", mutate, avgsteps = mean(steps))
+averageWDsteps<- ddply(weekdaysteps, "interval", mutate, avgsteps = mean(steps))
 
-## What is the average daily activity pattern?
-
-
-
-## Imputing missing values
-
-
-
-## Are there differences in activity patterns between weekdays and weekends?
+#Plotting time series of 5 minute intervals, weekdays vs. weekends
+plot(averageWEsteps$interval, averageWEsteps$steps, type = "l")
+plot(averageWDsteps$interval, averageWDsteps$steps, type = "l")
+```
